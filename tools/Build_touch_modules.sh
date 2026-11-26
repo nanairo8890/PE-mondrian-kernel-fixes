@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds only xiaomi_touch and the Goodix driver to check that they compile
-# Usage: W=<folder with kernel/ and modules/> CLANG_BIN=<clang/bin> bash build_touch_modules.sh
+# Usage: W=<folder with kernel/ and modules/> CLANG_BIN=<clang/bin> bash Build_touch_modules.sh
 set -euo pipefail
 W=${W:-$(pwd)}
 K=$W/kernel; O=$W/out-kernel

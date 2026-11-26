@@ -3,7 +3,7 @@
 # con el kernel, modules y devicetrees de las ramas de arreglos de pe-lf5-work
 # Variables: W (carpeta de trabajo), VERIFIER_REPO (clon de android_device_xiaomi_mondrian-kernel), THIN=1 (ThinLTO si falta memoria), JOBS
 # Al repetir etapas: mmrm/wlan y camera exigen el codigo original (git checkout -- . en upstream/xiaomi-wlan y xiaomi-camera-source)
-# Uso: bash compilar_ci_local.sh [etapa...]   (sin etapas: todas en orden; cada una deja una marca y se salta si ya terminó)
+# Uso: bash Compilar_ci_local.sh [etapa...]   (sin etapas: todas en orden; cada una deja una marca y se salta si ya terminó)
 # Etapas: prep config kernel mmrm wlan display camera media data dt package
 set -euo pipefail
 W=${W:-$HOME/pe-lf5-work}   # carpeta con kernel/ modules/ devicetrees/ y google-clang/

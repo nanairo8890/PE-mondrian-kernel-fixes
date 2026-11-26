@@ -72,7 +72,7 @@ Nothing in the ROM loaded the modules of `vendor_dlkm`, so display, touch, Wi-Fi
 - **sm8450-common:** new `rootdir/etc/init.vendor_dlkm.rc`, an own `vendor.modprobe` service that runs the platform `/vendor/bin/modprobe -b -s --all=/vendor_dlkm/lib/modules/modules.load` in AOSP's `vendor_modprobe` domain at early-init, as stock starts its loader, and sets `vendor.all.modules.ready`. No new SELinux policy is needed and the stock Qualcomm script (marked confidential and proprietary) is not used. It lifts the `vendor.modprobe` gate of `init-service-qualification.json` and adds a test for the service, its domain, its install and the first stage mount of `vendor_dlkm`. All 38 tests pass
 - **mondrian:** `BoardConfig.mk` installs the stock `modules.blocklist` of the release in the `vendor_boot` ramdisk and in `vendor_dlkm`. All 13 tests pass
 
-`docs/rom-module-loading.md` has the background, the checks against the AOSP 17 sources of the manifest and how to check it on the phone
+`docs/Rom-module-loading.md` has the background, the checks against the AOSP 17 sources of the manifest and how to check it on the phone
 
 ## Status
 
@@ -81,16 +81,16 @@ Nothing in the ROM loaded the modules of `vendor_dlkm`, so display, touch, Wi-Fi
 
 ## Tools
 
-`tools/build_touch_modules.sh` builds only `xiaomi_touch` and the Goodix driver, to check that they compile
+`tools/Build_touch_modules.sh` builds only `xiaomi_touch` and the Goodix driver, to check that they compile
 
 ```bash
-W=<folder with kernel/ and modules/> CLANG_BIN=<clang/bin> bash tools/build_touch_modules.sh
+W=<folder with kernel/ and modules/> CLANG_BIN=<clang/bin> bash tools/Build_touch_modules.sh
 ```
 
-`tools/compilar_ci_local.sh` replays the CI up to step 32 ("Package the mondrian kernel release") with these patches applied. The stages are `prep config kernel mmrm wlan display camera media data dt package` and each one leaves a mark, so a finished stage is skipped on the next run
+`tools/Compilar_ci_local.sh` replays the CI up to step 32 ("Package the mondrian kernel release") with these patches applied. The stages are `prep config kernel mmrm wlan display camera media data dt package` and each one leaves a mark, so a finished stage is skipped on the next run
 
 ```bash
-W=<folder with kernel/ modules/ devicetrees/ google-clang/> VERIFIER_REPO=<clone of android_device_xiaomi_mondrian-kernel> THIN=1 bash tools/compilar_ci_local.sh
+W=<folder with kernel/ modules/ devicetrees/ google-clang/> VERIFIER_REPO=<clone of android_device_xiaomi_mondrian-kernel> THIN=1 bash tools/Compilar_ci_local.sh
 ```
 
 - `THIN=1` switches Full LTO to ThinLTO, needed with 15 GB of RAM
@@ -98,7 +98,7 @@ W=<folder with kernel/ modules/ devicetrees/ google-clang/> VERIFIER_REPO=<clone
 - The comments of the script are in Spanish
 - To repeat `mmrm`, `wlan` and `camera` first restore the original sources with `git checkout -- .` in `upstream/xiaomi-wlan` and `xiaomi-camera-source`
 
-`docs/local-build-result.txt` has the result of the last full run: both `[PASS]` of `package_mondrian_kernel_release.py` and `verify_prebuilt.py`, with `xiaomi_touch.ko` and `goodix_core.ko` in `vendor_dlkm`
+`docs/Local-build-result.txt` has the result of the last full run: both `[PASS]` of `package_mondrian_kernel_release.py` and `verify_prebuilt.py`, with `xiaomi_touch.ko` and `goodix_core.ko` in `vendor_dlkm`
 
 ## Credits
 

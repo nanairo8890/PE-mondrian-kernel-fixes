@@ -61,6 +61,10 @@ Both modules build without warnings (Clang r584948, mondrian GKI config with Ful
 
 The stock OS3 module also has THP, knock and touch sensor nodes that are in no published Xiaomi source; the Goodix touch does not use them
 
+## Proposal for the ROM
+
+`docs/rom-module-loading.md`: nothing in the ROM loads the `vendor_dlkm` modules yet. It proposes Qualcomm's `vendor_modprobe.sh` as stock does, a small rc, the blocklist in `BoardConfig.mk` and a minimal SELinux policy. It also explains why `msm-cvp` should not be built
+
 ## Status
 
 - Nothing here has been tested on the phone yet

@@ -1,0 +1,35 @@
+From 6db2cde0f51fa21015b15f1be616d08aaab14e43 Mon Sep 17 00:00:00 2001
+From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 03:57:30 -0300
+Subject: [PATCH] mondrian: accept both dtc string list formats in the MMRM
+ check
+
+verify_full() looks for mm-rail-corners in the decompiled merged DTB as
+"lowsvs\0svs\0svsl1\0nom\0turbo", which is how dtc up to 1.7.0 (Ubuntu
+24.04) prints a string list. Newer dtc releases (seen with 1.8.1) print
+"lowsvs", "svs", "svsl1", "nom", "turbo", so the check fails with "MMRM
+node differs from the stock CAPE values" although the DTB is correct
+
+Normalise the node body before comparing so both formats pass
+---
+ tools/build_mondrian_multimedia.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/tools/build_mondrian_multimedia.py b/tools/build_mondrian_multimedia.py
+index e21626b..c12d5a1 100644
+--- a/tools/build_mondrian_multimedia.py
++++ b/tools/build_mondrian_multimedia.py
+@@ -138,7 +138,9 @@ def verify_full(dtb):
+     if not tdm_phandle or f"qcom,tert-mi2s-gpios = <{tdm_phandle.group(1)}>;" not in sound:
+         raise ValueError(f"{dtb.name}: qcom,tert-mi2s-gpios must select the enabled TDM pins")
+     mmrm = having("qcom,msm-mmrm")[0][1]
+-    # dtc prints string lists joined by \\0 when decompiling a DTB.
++    # dtc up to 1.7.0 prints string lists joined by \\0 when decompiling a DTB;
++    # newer releases print them as separate strings. Accept both.
++    mmrm = mmrm.replace('", "', "\\0")
+     for needle in ('mm-rail-corners = "lowsvs\\0svs\\0svsl1\\0nom\\0turbo";',
+                    "scaling-fact-leak = <0x9c0f 0xa4035 0xbf72c 0xd7ef4 0x108639>;"):
+         if needle not in mmrm:
+-- 
+2.56.1
+

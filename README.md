@@ -10,7 +10,7 @@ The base code is LF5's and these patches are for him to review and apply
 |---|---|---|
 | `patches/modules/0001-*.patch` | `android_kernel_xiaomi_sm8450-modules` | `f0100b23` (branch `bringup/a17-mondrian-kernel-release-20261126`) |
 | `patches/kernel/0001-*.patch` to `0004-*.patch` | `android_kernel_xiaomi_sm8450` | `2efda4cf` (branch `bringup/a17-mondrian-oem-display-coherent-20261115`) |
-| `patches/devicetrees/0001-*.patch` | `android_kernel_xiaomi_sm8450-devicetrees` | `547c333c` (branch `bringup/a17-mondrian-stock-dt-reconcile-20261125`) |
+| `patches/devicetrees/0001-*.patch` and `0002-*.patch` | `android_kernel_xiaomi_sm8450-devicetrees` | `547c333c` (branch `bringup/a17-mondrian-stock-dt-reconcile-20261125`) |
 | `patches/device-sm8450-common/0001-*.patch` | `android_device_xiaomi_sm8450-common` | `427b0f68` (branch `bringup/a17-mondrian-oem-vendor-os3-20261125`) |
 | `patches/device-mondrian/0001-*.patch` | `android_device_xiaomi_mondrian` | `aef7688d` (branch `bringup/a17-mondrian-oem-vendor-os3-20261125`) |
 
@@ -33,9 +33,11 @@ Checked with the stock modules of a mondrian dump: `verify_prebuilt.py` passes, 
 
 ### Device trees
 
-Removes `xiaomi-touch` from `dt-driver-coverage-allowlist.json` and adds it to the compatibles that must always have a driver, so the coverage check now requires the `xiaomi_touch` driver of the kernel patches. With them, `verify_dt_driver_coverage.py` resolves the node to `drivers/input/touchscreen/xiaomi/xiaomi_touch.c` and `CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=m`. Apply it together with the kernel patches, otherwise the coverage check fails for this node
+**0001** removes `xiaomi-touch` from `dt-driver-coverage-allowlist.json` and adds it to the compatibles that must always have a driver, so the coverage check now requires the `xiaomi_touch` driver of the kernel patches. With them, `verify_dt_driver_coverage.py` resolves the node to `drivers/input/touchscreen/xiaomi/xiaomi_touch.c` and `CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=m`. Apply it together with the kernel patches, otherwise the coverage check fails for this node
 
 All tests of the repository pass except 3 camera and Wi-Fi tests that need the `upstream/` submodules, which fail the same way without this patch
+
+**0002** makes the MMRM check of `tools/build_mondrian_multimedia.py` accept both ways dtc prints a string list. dtc up to 1.7.0 (Ubuntu 24.04, the CI) decompiles `mm-rail-corners` as `"lowsvs\0svs..."` and newer releases (seen with 1.8.1) as `"lowsvs", "svs", ...`, so on a newer host the build stopped with "MMRM node differs from the stock CAPE values" although the DTB is correct. It does not depend on the kernel patches
 
 ### Kernel
 

@@ -1,0 +1,80 @@
+From 3d2632e15ea2c9fd3c9d5776c9f0326a196b14ae Mon Sep 17 00:00:00 2001
+From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 02:35:07 -0300
+Subject: [PATCH 3/4] input: touchscreen: xiaomi: build on Clang and fail
+ safely before probe
+
+- Give the three functions declared with () a (void) prototype; the
+  kernel builds with -Werror,-Wstrict-prototypes
+- xiaomitouch_register_modedata() set -ENOMEM when the device had not
+  probed yet and then dereferenced the missing data anyway: return
+  -ENODEV instead, and reject a NULL interface or an out of range id
+- notify_gesture_single_tap() notified a NULL device when the node never
+  probed: return -ENODEV instead
+- Do not print the kernel virtual and physical address of the raw data
+  buffer
+---
+ drivers/input/touchscreen/xiaomi/xiaomi_touch.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/input/touchscreen/xiaomi/xiaomi_touch.c b/drivers/input/touchscreen/xiaomi/xiaomi_touch.c
+index 2bab44c0244e..3e4239f807fe 100644
+--- a/drivers/input/touchscreen/xiaomi/xiaomi_touch.c
++++ b/drivers/input/touchscreen/xiaomi/xiaomi_touch.c
+@@ -208,13 +208,13 @@ struct xiaomi_touch *xiaomi_touch_dev_get(int minor)
+ 		return NULL;
+ }
+ 
+-struct class *get_xiaomi_touch_class()
++struct class *get_xiaomi_touch_class(void)
+ {
+ 	return xiaomi_touch_dev.class;
+ }
+ EXPORT_SYMBOL_GPL(get_xiaomi_touch_class);
+ 
+-struct device *get_xiaomi_touch_dev()
++struct device *get_xiaomi_touch_dev(void)
+ {
+ 	return xiaomi_touch_dev.dev;
+ }
+@@ -225,8 +225,9 @@ int xiaomitouch_register_modedata(int touchId, struct xiaomi_touch_interface *da
+ 	int ret = 0;
+ 	struct xiaomi_touch_interface *touch_data = NULL;
+ 
+-	if (!touch_pdata)
+-		ret = -ENOMEM;
++	/* The touch driver can register before this device has probed. */
++	if (!touch_pdata || !data || touchId < 0 || touchId > 1)
++		return -ENODEV;
+ 
+ 	touch_data = touch_pdata->touch_data[touchId];
+ 	pr_info("%s\n", __func__);
+@@ -495,7 +496,7 @@ int copy_touch_rawdata(char *raw_base,  int len)
+ }
+ EXPORT_SYMBOL_GPL(copy_touch_rawdata);
+ 
+-int update_touch_rawdata()
++int update_touch_rawdata(void)
+ {
+ 	sysfs_notify(&xiaomi_touch_dev.dev->kobj, NULL,  "update_rawdata");
+ 
+@@ -1003,6 +1004,8 @@ EXPORT_SYMBOL_GPL(update_fod_press_status);
+ 
+ int notify_gesture_single_tap(void)
+ {
++	if (!xiaomi_touch_dev.dev)
++		return -ENODEV;
+ 	mutex_lock(&xiaomi_touch_dev.gesture_single_tap_mutex);
+ 	sysfs_notify(&xiaomi_touch_dev.dev->kobj, NULL,
+ 		     "gesture_single_tap_state");
+@@ -1259,7 +1262,6 @@ static int xiaomi_touch_probe(struct platform_device *pdev)
+ 	pdata->raw_head = 0;
+ 	pdata->raw_tail = 0;
+ 	pdata->phy_base = virt_to_phys(pdata->raw_data);
+-	pr_info("%s: kernel base:%lld, phy base:%lld\n", __func__,	(unsigned long)pdata->raw_data, (unsigned long)pdata->phy_base);
+ 	spin_lock_init(&pdata->raw_lock);
+ 	ret = xiaomi_touch_parse_dt(dev, pdata);
+ 	if (ret < 0) {
+-- 
+2.56.1
+

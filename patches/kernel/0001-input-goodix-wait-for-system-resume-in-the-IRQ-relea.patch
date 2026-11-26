@@ -1,8 +1,8 @@
-From 003a13416cdfb02a771d734738e4c8481d6269a0 Mon Sep 17 00:00:00 2001
+From 4b73c421e95c546e2ea4c13d0e959e2a639b54ab Mon Sep 17 00:00:00 2001
 From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
 Date: Thu, 26 Nov 2026 02:12:55 -0300
-Subject: [PATCH] input: goodix: wait for system resume in the IRQ, release FOD
- contacts, apply DT pin states
+Subject: [PATCH 1/4] input: goodix: wait for system resume in the IRQ, release
+ FOD contacts, apply DT pin states
 
 Four touch issues found reading 2efda4cf1afa, none of them seen on
 hardware yet:
@@ -32,12 +32,12 @@ hardware yet:
 Compiled as a module with Clang r584948 against the mondrian GKI
 config with the hardening fragment, no warnings in the driver
 ---
- .../goodix_berlin_driver/goodix_ts_core.c     | 85 +++++++++++++++++--
+ .../goodix_berlin_driver/goodix_ts_core.c     | 85 ++++++++++++++++++-
  .../goodix_berlin_driver/goodix_ts_core.h     | 15 ++++
- 2 files changed, 95 insertions(+), 5 deletions(-)
+ 2 files changed, 96 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
-index 0d45ff5551bd..dc842eb0d73e 100644
+index 0d45ff5551bd..772f95380387 100644
 --- a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
 +++ b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
 @@ -1246,6 +1246,16 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
@@ -168,18 +168,18 @@ index 0d45ff5551bd..dc842eb0d73e 100644
  	return ret;
  }
  
-@@ -2263,7 +2331,9 @@ static int goodix_ts_probe(struct platform_device *pdev)
+@@ -2263,6 +2331,10 @@ static int goodix_ts_probe(struct platform_device *pdev)
  			if (ret != -EPROBE_DEFER)
  				ts_err(bus_interface->dev,
  				       "failed to parse device tree: %d", ret);
--			return ret;
-+			/* Name the wait in devices_deferred instead of retrying silently. */
-+			return dev_err_probe(&pdev->dev, ret,
-+					     "touch DT resources not ready (display panel or supply)\n");
++			else
++				/* Name the wait in devices_deferred, not a silent retry. */
++				dev_err_probe(&pdev->dev, ret,
++					      "touch DT resources not ready (display panel or supply)\n");
+ 			return ret;
  		}
  	} else {
- 		ts_err(bus_interface->dev, "no valid device tree node found");
-@@ -2288,6 +2358,11 @@ static int goodix_ts_probe(struct platform_device *pdev)
+@@ -2288,6 +2360,11 @@ static int goodix_ts_probe(struct platform_device *pdev)
  	/* Sysfs/debug users and the asynchronous setup thread may use this. */
  	mutex_init(&core_data->cmd_lock);
  	mutex_init(&core_data->pm_lock);

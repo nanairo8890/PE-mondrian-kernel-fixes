@@ -1,0 +1,395 @@
+From 61962a359292d116c149861a394245594807fd43 Mon Sep 17 00:00:00 2001
+From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 02:37:24 -0300
+Subject: [PATCH 4/4] input: goodix: report fingerprint presses and take touch
+ modes from xiaomi_touch
+
+The stock fingerprint and touch feature components of mondrian set touch
+modes through /dev/xiaomi-touch and wait on fod_press_status. The Goodix
+Berlin driver had its own gesture nodes only, so neither worked. Connect
+it to xiaomi_touch the way Xiaomi's GT9916 driver (marble-s-oss
+goodix_9916) does, in a separate file:
+
+- Touch_Doubletap_Mode, Touch_Fod_Enable and Touch_Aod_Enable or
+  Touch_FodIcon_Enable set the double tap, FOD and single tap bits of the
+  gesture mask; the other modes are stored and reported as unsupported
+  (0..0) values
+- A mode change while the touch is asleep is applied at once: the touch
+  is woken and suspended again with the new mask, under the PM lock and
+  from a freezable work item
+- fod_press_status follows the FOD-DOWN and FOD-UP gestures with the
+  screen off and the fingerprint flag of the touch events with the screen
+  on; it is cleared at resume and when FOD-UP arrives with FOD disabled
+- Single tap notifies gesture_single_tap_state and the suspend state
+  follows the touch
+
+Builds without xiaomi_touch too: the glue is compiled out when it is not
+reachable. goodix_core now depends on xiaomi_touch, as the stock module.
+Xiaomi's interface has no unregister call, so the touch module must not
+be unloaded while xiaomi_touch stays loaded
+---
+ .../touchscreen/goodix_berlin_driver/Makefile |   2 +-
+ .../goodix_berlin_driver/goodix_ts_core.c     |  28 +++
+ .../goodix_berlin_driver/goodix_ts_core.h     |  22 ++
+ .../goodix_berlin_driver/goodix_ts_gesture.c  |   4 +
+ .../goodix_berlin_driver/goodix_ts_xiaomi.c   | 192 ++++++++++++++++++
+ 5 files changed, 247 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_xiaomi.c
+
+diff --git a/drivers/input/touchscreen/goodix_berlin_driver/Makefile b/drivers/input/touchscreen/goodix_berlin_driver/Makefile
+index 605d4140b92e..ca58b52a651e 100644
+--- a/drivers/input/touchscreen/goodix_berlin_driver/Makefile
++++ b/drivers/input/touchscreen/goodix_berlin_driver/Makefile
+@@ -3,4 +3,4 @@ obj-$(CONFIG_TOUCHSCREEN_GOODIX_BRL) += goodix_core.o
+ goodix_core-y := goodix_brl_spi.o goodix_ts_core.o goodix_brl_hw.o \
+ 	goodix_cfg_bin.o goodix_ts_utils.o goodix_brl_fwupdate.o \
+ 	goodix_ts_gesture.o goodix_ts_inspect.o goodix_ts_tools.o \
+-	goodix_ts_dump.o goodix_ts_replay.o
++	goodix_ts_dump.o goodix_ts_replay.o goodix_ts_xiaomi.o
+diff --git a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
+index 772f95380387..4681f9b424a5 100644
+--- a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
++++ b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
+@@ -1264,6 +1264,8 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
+ 	if (likely(!ret)) {
+         if (!atomic_read(&core_data->suspended)) { // coor mode
+             if (ts_event->event_type & EVENT_TOUCH) {
++                /* The chip flags a finger on the fingerprint sensor. */
++                goodix_xm_fod_press(core_data, !!ts_event->fp_flag);
+                 /* report touch */
+ #ifdef INPUT_TYPE_B_PROTOCOL
+                 goodix_ts_report_finger(core_data, &ts_event->touch_data);
+@@ -1831,6 +1833,7 @@ static int goodix_ts_suspend_locked(struct goodix_ts_core *core_data)
+ 		}
+ 	}
+ 
++	goodix_xm_suspend_state(core_data, true);
+ 	ts_info(dev, "Suspend end");
+ 	return 0;
+ }
+@@ -1881,11 +1884,14 @@ static int goodix_ts_resume_locked(struct goodix_ts_core *core_data)
+ 	 */
+ 	if (core_data->suspend_gestures)
+ 		goodix_ts_release_connects(core_data);
++	/* Its FOD-UP may have been lost in the same reset. */
++	goodix_xm_fod_press(core_data, false);
+ 	core_data->suspend_gestures = 0;
+ 	/* enable irq */
+ 	hw_ops->irq_enable(core_data, true);
+ 	/* open esd */
+ 	goodix_ts_esd_on(core_data);
++	goodix_xm_suspend_state(core_data, false);
+ 	ts_info(dev, "Resume end");
+ 	return 0;
+ }
+@@ -1910,6 +1916,25 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
+ 	return ret;
+ }
+ 
++/*
++ * A gesture change while the touch is asleep only reaches the chip at the
++ * next suspend. Wake it and suspend it again so it enters the current mask,
++ * from gesture mode, from sleep or from power off alike.
++ */
++void goodix_ts_reapply_gestures(struct goodix_ts_core *core_data)
++{
++	mutex_lock(&core_data->pm_lock);
++	if (core_data->init_stage >= CORE_INIT_STAGE2 &&
++	    atomic_read(&core_data->suspended) &&
++	    core_data->suspend_gestures != READ_ONCE(core_data->gesture_type)) {
++		ts_info(core_data->bus->dev, "apply gestures 0x%x while suspended",
++			READ_ONCE(core_data->gesture_type));
++		goodix_ts_resume_locked(core_data);
++		goodix_ts_suspend_locked(core_data);
++	}
++	mutex_unlock(&core_data->pm_lock);
++}
++
+ static void goodix_ts_resume_work(struct work_struct *work)
+ {
+ 	struct goodix_ts_core *cd =
+@@ -2146,6 +2171,8 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
+ 
+ 	/* gesture init */
+ 	gesture_module_init(cd);
++	/* Xiaomi touch modes and fingerprint press status */
++	goodix_xm_init(cd);
+ 
+ 	/* inspect init */
+ 	inspect_module_init(cd);
+@@ -2457,6 +2484,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
+ 	goodix_fw_update_uninit(core_data);
+ 
+ 	if (core_data->init_stage >= CORE_INIT_STAGE2) {
++		goodix_xm_exit(core_data);
+ 		gesture_module_exit(core_data);
+ 		inspect_module_exit(core_data);
+ 		hw_ops->irq_enable(core_data, false);
+diff --git a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h
+index 087c6e4f6549..ff6b9530d901 100644
+--- a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h
++++ b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h
+@@ -782,6 +782,10 @@ struct goodix_ts_core {
+ 	struct pinctrl *pinctrl;
+ 	struct pinctrl_state *pin_active;
+ 	struct pinctrl_state *pin_suspend;
++	/* A finger on the fingerprint sensor, as reported to xiaomi_touch. */
++	bool fod_pressed;
++	/* Applies a gesture change from the Xiaomi touch modes to the chip. */
++	struct work_struct xm_apply_work;
+ 	/* One-shot firmware/setup thread must finish before device teardown. */
+ 	struct task_struct *init_thread;
+ 	/* TODO counld we remove this from core data? */
+@@ -868,4 +872,22 @@ int goodix_ts_replay_init(struct goodix_ts_core *core_data);
+ void goodix_ts_replay_exit(struct goodix_ts_core *core_data);
+ int goodix_ts_replay_record(struct goodix_ts_core *core_data, struct goodix_ts_event *ts_event);
+ 
++/* Re-enter the suspend mode so the chip uses the current gesture mask. */
++void goodix_ts_reapply_gestures(struct goodix_ts_core *cd);
++
++/* Xiaomi touch feature glue (goodix_ts_xiaomi.c). */
++#if IS_REACHABLE(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE)
++void goodix_xm_init(struct goodix_ts_core *cd);
++void goodix_xm_exit(struct goodix_ts_core *cd);
++void goodix_xm_fod_press(struct goodix_ts_core *cd, bool pressed);
++void goodix_xm_single_tap(struct goodix_ts_core *cd);
++void goodix_xm_suspend_state(struct goodix_ts_core *cd, bool suspended);
++#else
++static inline void goodix_xm_init(struct goodix_ts_core *cd) {}
++static inline void goodix_xm_exit(struct goodix_ts_core *cd) {}
++static inline void goodix_xm_fod_press(struct goodix_ts_core *cd, bool pressed) {}
++static inline void goodix_xm_single_tap(struct goodix_ts_core *cd) {}
++static inline void goodix_xm_suspend_state(struct goodix_ts_core *cd, bool suspended) {}
++#endif
++
+ #endif
+diff --git a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_gesture.c b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_gesture.c
+index fd9b2eb42d40..2f31a37ac6c3 100644
+--- a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_gesture.c
++++ b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_gesture.c
+@@ -172,6 +172,7 @@ int goodix_ts_report_gesture(struct goodix_ts_core *cd,
+ 	case GOODIX_GESTURE_SINGLE_TAP:
+ 		if (cd->gesture_type & GESTURE_SINGLE_TAP) {
+ 			ts_info(dev, "get SINGLE-TAP gesture");
++			goodix_xm_single_tap(cd);
+ 			input_report_key(cd->input_dev, KEY_WAKEUP, 1);
+ 			// input_report_key(cd->input_dev, KEY_GOTO, 1);
+ 			input_sync(cd->input_dev);
+@@ -213,6 +214,7 @@ int goodix_ts_report_gesture(struct goodix_ts_core *cd,
+ 			input_report_abs(cd->input_dev, ABS_MT_WIDTH_MAJOR,
+ 					 overlay_area);
+ 			input_sync(cd->input_dev);
++			goodix_xm_fod_press(cd, true);
+ 		} else {
+ 			ts_debug(dev, "not enable FOD-DOWN");
+ 		}
+@@ -231,6 +233,8 @@ int goodix_ts_report_gesture(struct goodix_ts_core *cd,
+ 		} else {
+ 			ts_debug(dev, "not enable FOD-UP");
+ 		}
++		/* Release even if FOD was disabled while the finger was down. */
++		goodix_xm_fod_press(cd, false);
+ 		break;
+ 	case GOODIX_GESTURE_SLIDE_UP:
+ 		if (cd->gesture_type & GESTURE_SLIDE_UP) {
+diff --git a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_xiaomi.c b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_xiaomi.c
+new file mode 100644
+index 000000000000..be2a3c6d3e57
+--- /dev/null
++++ b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_xiaomi.c
+@@ -0,0 +1,192 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xiaomi touch feature glue for the Goodix Berlin touchscreen of mondrian
++ *
++ * The stock fingerprint and touch feature components drive the touch through
++ * /dev/xiaomi-touch modes (Touch_Fod_Enable, Touch_Doubletap_Mode,
++ * Touch_Aod_Enable, Touch_FodIcon_Enable) and wait on
++ * /sys/class/touch/touch_dev/fod_press_status. This file maps those modes to
++ * the driver's gesture mask and reports finger presses on the sensor, as
++ * Xiaomi's own GT9916 driver (marble-s-oss goodix_9916) does
++ */
++#include "goodix_ts_core.h"
++
++#if IS_REACHABLE(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE)
++#include "../xiaomi/xiaomi_touch.h"
++
++#define GOODIX_XM_GESTURES (GESTURE_DOUBLE_TAP | GESTURE_SINGLE_TAP | GESTURE_FOD_PRESS)
++
++static struct goodix_ts_core *xm_cd;
++static struct xiaomi_touch_interface xm_intf;
++static DEFINE_MUTEX(xm_mode_lock);
++
++static void goodix_xm_set_range(int mode, int min, int max, int def)
++{
++	xm_intf.touch_mode[mode][GET_MIN_VALUE] = min;
++	xm_intf.touch_mode[mode][GET_MAX_VALUE] = max;
++	xm_intf.touch_mode[mode][GET_DEF_VALUE] = def;
++	xm_intf.touch_mode[mode][SET_CUR_VALUE] = def;
++	xm_intf.touch_mode[mode][GET_CUR_VALUE] = def;
++}
++
++/* Caller holds xm_mode_lock. */
++static u32 goodix_xm_gesture_mask(void)
++{
++	u32 mask = 0;
++
++	if (xm_intf.touch_mode[Touch_Doubletap_Mode][GET_CUR_VALUE])
++		mask |= GESTURE_DOUBLE_TAP;
++	if (xm_intf.touch_mode[Touch_Fod_Enable][GET_CUR_VALUE])
++		mask |= GESTURE_FOD_PRESS;
++	if (xm_intf.touch_mode[Touch_Aod_Enable][GET_CUR_VALUE] ||
++	    xm_intf.touch_mode[Touch_FodIcon_Enable][GET_CUR_VALUE])
++		mask |= GESTURE_SINGLE_TAP;
++	return mask;
++}
++
++/* Caller holds xm_mode_lock. */
++static void goodix_xm_apply_locked(struct goodix_ts_core *cd)
++{
++	u32 type = READ_ONCE(cd->gesture_type);
++
++	WRITE_ONCE(cd->gesture_type,
++		   (type & ~GOODIX_XM_GESTURES) | goodix_xm_gesture_mask());
++	/* Applied to the chip at the next suspend, or now if it is asleep. */
++	queue_work(system_freezable_wq, &cd->xm_apply_work);
++}
++
++static void goodix_xm_apply_work(struct work_struct *work)
++{
++	struct goodix_ts_core *cd =
++		container_of(work, struct goodix_ts_core, xm_apply_work);
++
++	goodix_ts_reapply_gestures(cd);
++}
++
++static int goodix_xm_set_mode(int mode, int value)
++{
++	struct goodix_ts_core *cd = READ_ONCE(xm_cd);
++
++	if (!cd || cd->init_stage < CORE_INIT_STAGE2)
++		return -ENODEV;
++	if (mode < 0 || mode >= Touch_Mode_NUM)
++		return -EINVAL;
++
++	mutex_lock(&xm_mode_lock);
++	value = clamp(value, xm_intf.touch_mode[mode][GET_MIN_VALUE],
++		      xm_intf.touch_mode[mode][GET_MAX_VALUE]);
++	xm_intf.touch_mode[mode][SET_CUR_VALUE] = value;
++	xm_intf.touch_mode[mode][GET_CUR_VALUE] = value;
++	ts_info(cd->bus->dev, "xiaomi touch mode %d = %d", mode, value);
++	goodix_xm_apply_locked(cd);
++	mutex_unlock(&xm_mode_lock);
++	return 0;
++}
++
++static int goodix_xm_get_mode(int mode, int value_type)
++{
++	int value;
++
++	if (mode < 0 || mode >= Touch_Mode_NUM ||
++	    value_type < 0 || value_type >= VALUE_TYPE_SIZE)
++		return -EINVAL;
++	mutex_lock(&xm_mode_lock);
++	value = xm_intf.touch_mode[mode][value_type];
++	mutex_unlock(&xm_mode_lock);
++	return value;
++}
++
++static int goodix_xm_get_mode_all(int mode, int *value)
++{
++	if (mode < 0 || mode >= Touch_Mode_NUM || !value)
++		return -EINVAL;
++	mutex_lock(&xm_mode_lock);
++	value[0] = xm_intf.touch_mode[mode][GET_CUR_VALUE];
++	value[1] = xm_intf.touch_mode[mode][GET_DEF_VALUE];
++	value[2] = xm_intf.touch_mode[mode][GET_MIN_VALUE];
++	value[3] = xm_intf.touch_mode[mode][GET_MAX_VALUE];
++	mutex_unlock(&xm_mode_lock);
++	return 0;
++}
++
++/* Mode 0 resets every mode but the panel orientation, as Xiaomi's driver. */
++static int goodix_xm_reset_mode(int mode)
++{
++	struct goodix_ts_core *cd = READ_ONCE(xm_cd);
++	int i;
++
++	if (!cd || cd->init_stage < CORE_INIT_STAGE2)
++		return -ENODEV;
++	if (mode < 0 || mode >= Touch_Mode_NUM)
++		return -EINVAL;
++
++	mutex_lock(&xm_mode_lock);
++	for (i = 0; i < Touch_Mode_NUM; i++) {
++		if ((mode && i != mode) || (!mode && i == Touch_Panel_Orientation))
++			continue;
++		xm_intf.touch_mode[i][SET_CUR_VALUE] = xm_intf.touch_mode[i][GET_DEF_VALUE];
++		xm_intf.touch_mode[i][GET_CUR_VALUE] = xm_intf.touch_mode[i][GET_DEF_VALUE];
++	}
++	goodix_xm_apply_locked(cd);
++	mutex_unlock(&xm_mode_lock);
++	return 0;
++}
++
++void goodix_xm_fod_press(struct goodix_ts_core *cd, bool pressed)
++{
++	if (cd->fod_pressed == pressed)
++		return;
++	if (pressed && !(READ_ONCE(cd->gesture_type) & GESTURE_FOD_PRESS))
++		return;
++	cd->fod_pressed = pressed;
++	ts_info(cd->bus->dev, "fod %s", pressed ? "down" : "up");
++	update_fod_press_status(pressed);
++}
++
++void goodix_xm_single_tap(struct goodix_ts_core *cd)
++{
++	notify_gesture_single_tap();
++}
++
++void goodix_xm_suspend_state(struct goodix_ts_core *cd, bool suspended)
++{
++	xiaomi_touch_set_suspend_state(suspended ? XIAOMI_TOUCH_SUSPEND :
++				       XIAOMI_TOUCH_RESUME);
++}
++
++void goodix_xm_init(struct goodix_ts_core *cd)
++{
++	struct device *dev = cd->bus->dev;
++	int ret;
++
++	INIT_WORK(&cd->xm_apply_work, goodix_xm_apply_work);
++
++	mutex_lock(&xm_mode_lock);
++	memset(&xm_intf, 0, sizeof(xm_intf));
++	goodix_xm_set_range(Touch_Doubletap_Mode, 0, 1, 0);
++	goodix_xm_set_range(Touch_Fod_Enable, 0, 1, 0);
++	goodix_xm_set_range(Touch_Aod_Enable, 0, 1, 0);
++	goodix_xm_set_range(Touch_FodIcon_Enable, 0, 1, 0);
++	goodix_xm_set_range(Touch_Nonui_Mode, 0, 2, 0);
++	xm_intf.setModeValue = goodix_xm_set_mode;
++	xm_intf.getModeValue = goodix_xm_get_mode;
++	xm_intf.getModeAll = goodix_xm_get_mode_all;
++	xm_intf.resetMode = goodix_xm_reset_mode;
++	mutex_unlock(&xm_mode_lock);
++
++	WRITE_ONCE(xm_cd, cd);
++	ret = xiaomitouch_register_modedata(0, &xm_intf);
++	if (ret)
++		ts_err(dev, "xiaomi touch interface not registered: %d", ret);
++	else
++		ts_info(dev, "xiaomi touch interface registered");
++}
++
++void goodix_xm_exit(struct goodix_ts_core *cd)
++{
++	WRITE_ONCE(xm_cd, NULL);
++	cancel_work_sync(&cd->xm_apply_work);
++	if (cd->fod_pressed)
++		goodix_xm_fod_press(cd, false);
++}
++#endif
+-- 
+2.56.1
+

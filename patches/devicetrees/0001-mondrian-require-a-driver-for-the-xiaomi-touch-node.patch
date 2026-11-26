@@ -1,0 +1,50 @@
+From d66ac97998ce133ecd9313f7fc999fd8e1db1929 Mon Sep 17 00:00:00 2001
+From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 02:40:34 -0300
+Subject: [PATCH] mondrian: require a driver for the xiaomi-touch node
+
+The kernel now builds Xiaomi's touch feature driver (xiaomi_touch, from
+MiCode mayfly-s-oss) as CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=m, and the
+Goodix driver reports fingerprint presses through it. Drop xiaomi-touch
+from the coverage allowlist so the coverage check requires that driver,
+and add it to the compatibles that may never be allowlisted
+
+verify_dt_driver_coverage.py resolves xiaomi-touch to
+drivers/input/touchscreen/xiaomi/xiaomi_touch.c and
+CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=m with the kernel patches applied.
+Without them the coverage check fails for this node
+---
+ dt-driver-coverage-allowlist.json    | 3 ---
+ tests/test_mondrian_multimedia_dt.py | 2 +-
+ 2 files changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/dt-driver-coverage-allowlist.json b/dt-driver-coverage-allowlist.json
+index 3529aa3..edf6289 100644
+--- a/dt-driver-coverage-allowlist.json
++++ b/dt-driver-coverage-allowlist.json
+@@ -73,9 +73,6 @@
+     "qcom,ipcc-self-ping": {
+       "reason": "IPCC self-ping debug client; no driver exists in the Xiaomi mondrian-s-oss kernel."
+     },
+-    "xiaomi-touch": {
+-      "reason": "Xiaomi touch-feature class node; the driver is not in Xiaomi's public mondrian source. The Goodix Berlin driver exposes double-tap and FOD gesture control itself."
+-    },
+     "xiaomi,hardware-info": {
+       "reason": "Xiaomi hardware-info reporting node used by MIUI/HyperOS apps; driver not published by Xiaomi and not required by AOSP."
+     },
+diff --git a/tests/test_mondrian_multimedia_dt.py b/tests/test_mondrian_multimedia_dt.py
+index 43e1286..af0450b 100644
+--- a/tests/test_mondrian_multimedia_dt.py
++++ b/tests/test_mondrian_multimedia_dt.py
+@@ -80,7 +80,7 @@ class CoverageAllowlist(unittest.TestCase):
+         "qcom,waipio-cvp", "qcom,waipio-asoc-snd", "qcom,spf-core-platform", "qcom,lpass-cdc",
+         "qcom,wcd938x-codec", "awinic,aw882xx_smartpa", "goodix,gt9916S", "goodix,fingerprint",
+         "qcom,msm-mmrm", "qcom,cnss-qca6490", "qcom,sde-kms", "qcom,dsi-display",
+-        "xiaomi,wl2866d", "qcom,kgsl-3d0", "qcom,sn-nci",
++        "xiaomi,wl2866d", "qcom,kgsl-3d0", "qcom,sn-nci", "xiaomi-touch",
+     }
+ 
+     def test_every_entry_is_justified(self):
+-- 
+2.56.1
+

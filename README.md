@@ -10,6 +10,7 @@ Private repository: the base code is LF5's and these patches are for him
 |---|---|---|
 | `patches/modules/0001-*.patch` | `android_kernel_xiaomi_sm8450-modules` | `f0100b23` (branch `bringup/a17-mondrian-kernel-release-20261126`) |
 | `patches/kernel/0001-*.patch` to `0004-*.patch` | `android_kernel_xiaomi_sm8450` | `2efda4cf` (branch `bringup/a17-mondrian-oem-display-coherent-20261115`) |
+| `patches/devicetrees/0001-*.patch` | `android_kernel_xiaomi_sm8450-devicetrees` | `547c333c` (branch `bringup/a17-mondrian-stock-dt-reconcile-20261125`) |
 
 Apply them in order with `git am`:
 
@@ -27,6 +28,12 @@ Fixes the CI step "Package the mondrian kernel release"
 - 3 new tests, all 161 tests of the repository pass
 
 Checked with the stock modules of a mondrian dump: `verify_prebuilt.py` passes, 306 of the 307 `vendor_dlkm` modules end up there and every second stage dependency can be loaded
+
+### Device trees
+
+Removes `xiaomi-touch` from `dt-driver-coverage-allowlist.json` and adds it to the compatibles that must always have a driver, so the coverage check now requires the `xiaomi_touch` driver of the kernel patches. With them, `verify_dt_driver_coverage.py` resolves the node to `drivers/input/touchscreen/xiaomi/xiaomi_touch.c` and `CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=m`. Apply it together with the kernel patches, otherwise the coverage check fails for this node
+
+All tests of the repository pass except 3 camera and Wi-Fi tests that need the `upstream/` submodules, which fail the same way without this patch
 
 ### Kernel
 
@@ -58,7 +65,6 @@ The stock OS3 module also has THP, knock and touch sensor nodes that are in no p
 
 - Nothing here has been tested on the phone yet
 - Game mode and the other touch tuning modes are stored but not sent to the chip
-- `dt-driver-coverage-allowlist.json` in the devicetrees repository still lists `xiaomi-touch` as a node without a driver
 
 ## Tools
 

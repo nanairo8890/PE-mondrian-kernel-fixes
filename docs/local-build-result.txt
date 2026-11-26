@@ -1,0 +1,139 @@
+Local replay of the CI up to step 32 (ThinLTO instead of Full LTO, not tested on the phone)
+kernel 61962a359292, modules 9e295ef3f4cc, devicetrees 6db2cde0f51f, clang-r614150
+
+[PASS] mondrian OEM CPU voltage, CPUFreq hotplug, WALT thermal pause and GPU devfreq safety checks
+[PENDING] LLVM build and runtime thermal transitions on SM8475
+[PASS] Complete manufacturer Goodix Berlin source and mondrian SPI binding
+[PENDING] real LLVM module compile, firmware, FOD and device runtime
+[PASS] evaluated WAIPIO/TUI and generic Kbuild profiles; native DSC retained
+[PASS] 508 official Qualcomm display-source paths
+[PASS] WAIPIO SDE/DSI source pinned with reviewed Linux 5.10/LLVM23 adjustments
+[PASS] original Xiaomi generic DRM unchanged and not selected
+[PASS] Reviewed Qualcomm Display snapshot and actual Kbuild profiles
+[PASS] Original Qualcomm CAPE DISPCC preserved; PM success/error paths balanced
+[PASS] Generic DRM_MSM remains disabled; OEM techpack structure preserved
+[PASS] OEM kernel .config: HW MTE KASAN, Full LTO, CFI, SCS retained
+[PASS] OEM Kconfig processed 10 EROFS/F2FS/FBE/HWID requirements
+[PASS] Validated 8 pinned OEM source edits
+[PASS] Applied 8 exact OEM Clang23 source fixes
+[PASS] Xiaomi Camera Gitlink URL, 40-hex SHA, tree and blobs pinned
+[PENDING] Camera DTS/HAL, product load list and hardware tests
+[PASS] Applied exact OEM Camera Clang23 prototype corrections (four C lines)
+[PASS] Selected OEM PM8350C path; yudi auxiliary GPIO356 backend forbidden
+[PENDING] PM8350C torch and flash on physical mondrian
+[PASS] Xiaomi Ziyi WAIPIO/AW882xx and Qualcomm VIDC exact source pins
+[PASS] Original Xiaomi Ziyi source pinned; only 2 QoS prototypes adjusted
+[PASS] Exactly 18 Qualcomm VIDC declarations and initializers corrected; behavior unchanged
+[PASS] aw882xx_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PENDING] Firmware and device integration
+[PASS] cs35l41_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] hdmi_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] lpass_cdc_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] lpass_cdc_rx_macro_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] lpass_cdc_tx_macro_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] lpass_cdc_va_macro_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] lpass_cdc_wsa2_macro_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] lpass_cdc_wsa_macro_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] mbhc_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] stub_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] swr_dmic_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] swr_haptics_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] wcd937x_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] wcd937x_slave_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] wcd938x_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] wcd938x_slave_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] wcd9xxx_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] wcd_core_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] wsa883x_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] machine_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] adsp_loader_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] audio_prm_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] audpkt_ion_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] q6_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] q6_notifier_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] q6_pdr_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] spf_core_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] audio_pkt_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] gpr_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] pinctrl_lpi_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] snd_event_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] swr_ctrl_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] swr_dlkm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] msm_video.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] Qualcomm WAIPIO 11900 IPA/GSI, RMNET core+ext and EVA exact source pins
+[PASS] dataipa: 2 reviewed patch(es) applied to 17561e53321d
+[PASS] datarmnet: 1 reviewed patch(es) applied to cc9cb6220a42
+[PASS] datarmnet-ext: 0 reviewed patch(es) applied to 5aa3b6c45d19
+[PASS] eva-kernel: 1 reviewed patch(es) applied to 8613d42b73d6
+[PASS] gsim.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] ipam.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] ipanetm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rndisipam.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] ipa_clientsm.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_core.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_ctl.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_offload.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_perf.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_perf_tether.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_shs.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_wlan.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_aps.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] rmnet_sch.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] msm-eva.ko: exact kernel SHA, AArch64 ELF, license and vermagic
+[PASS] OEM Cape DTBs and mondrian board overlay compiled and applied
+[PASS] OEM mondrian AW882xx I2C/GPIO and MI2S2 board routing in all Cape DTBs
+[PENDING] Display/camera DTBO, bootloader and hardware boot
+[PASS] pinned OEM Cape Camera CCI/CSI/CPAS applied to all mondrian Cape bases
+[PASS] four mondrian sensor/EEPROM routes and three rear flash consumers linked
+[PENDING] sensor probing, power sequencing, PM8350C and Camera HAL on hardware
+[PASS] every enabled mondrian DT device has an enabled kernel or external driver
+fallas de cobertura: []
+[PASS] one mondrian overlay gives the chain's tree on cape, capep, cape-v2; dtbo.img 4b82e715412fb123
+[PASS] 5.10.81-gki-g61962a359292: 324 modules in vendor_ramdisk, 278 in vendor_dlkm; stock modules not built: 44
+  not built: atmel_mxt_ts.ko
+  not built: binder_gki.ko
+  not built: binder_prio.ko
+  not built: binderinfo.ko
+  not built: bootinfo.ko
+  not built: cpq.ko
+  not built: debug_ext.ko
+  not built: focaltech_fts.ko
+  not built: hardwareinfo.ko
+  not built: metis.ko
+  not built: mi_freqwdg.ko
+  not built: mi_memory.ko
+  not built: mi_power.ko
+  not built: mi_schedule.ko
+  not built: mi_thermal_interface.ko
+  not built: miev.ko
+  not built: migt.ko
+  not built: miicmpfilter.ko
+  not built: millet_binder.ko
+  not built: millet_core.ko
+  not built: millet_hs.ko
+  not built: millet_oem_cgroup.ko
+  not built: millet_pkg.ko
+  not built: millet_sig.ko
+  not built: minet.ko
+  not built: miwill.ko
+  not built: miwill_mode_redudancy.ko
+  not built: mmrm_test_module.ko
+  not built: msm-cvp.ko
+  not built: nb7vpq904m.ko
+  not built: nt36xxx-i2c.ko
+  not built: perf_helper.ko
+  not built: perfmgr.ko
+  not built: phy-qcom-ufs-qmp-v4-anarok.ko
+  not built: phy-qcom-ufs-qmp-v4-parrot.ko
+  not built: qca_cld3_qca6750.ko
+  not built: qti_battery_charger_main_m81.ko
+  not built: redriver.ko
+  not built: shared_rail_scmi.ko
+  not built: shared_rail_vendor.ko
+  not built: sla.ko
+  not built: swinfo.ko
+  not built: synaptics_dsx.ko
+  not built: xm_power.ko
+[PASS] 612 prebuilt files match provenance: kernel 61962a359292, modules 9e295ef3f4cc, DT 6db2cde0f51f, clang-r614150, CI run 0
+
+xiaomi_touch.ko and goodix_core.ko are in vendor_dlkm and in its modules.load

@@ -87,6 +87,19 @@ Nothing in the ROM loaded the modules of `vendor_dlkm`, so display, touch, Wi-Fi
 W=<folder with kernel/ and modules/> CLANG_BIN=<clang/bin> bash tools/build_touch_modules.sh
 ```
 
+`tools/compilar_ci_local.sh` replays the CI up to step 32 ("Package the mondrian kernel release") with these patches applied. The stages are `prep config kernel mmrm wlan display camera media data dt package` and each one leaves a mark, so a finished stage is skipped on the next run
+
+```bash
+W=<folder with kernel/ modules/ devicetrees/ google-clang/> VERIFIER_REPO=<clone of android_device_xiaomi_mondrian-kernel> THIN=1 bash tools/compilar_ci_local.sh
+```
+
+- `THIN=1` switches Full LTO to ThinLTO, needed with 15 GB of RAM
+- `prep` moves the kernel and devicetrees pins to the local commits, without committing
+- The comments of the script are in Spanish
+- To repeat `mmrm`, `wlan` and `camera` first restore the original sources with `git checkout -- .` in `upstream/xiaomi-wlan` and `xiaomi-camera-source`
+
+`docs/local-build-result.txt` has the result of the last full run: both `[PASS]` of `package_mondrian_kernel_release.py` and `verify_prebuilt.py`, with `xiaomi_touch.ko` and `goodix_core.ko` in `vendor_dlkm`
+
 ## Credits
 
 - LF5 (Anatoly), author of the PixelExperience-Reborn kernel, modules and device trees for mondrian

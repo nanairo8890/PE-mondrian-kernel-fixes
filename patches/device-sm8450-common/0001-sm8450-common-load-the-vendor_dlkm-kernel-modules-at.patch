@@ -1,0 +1,186 @@
+From bcdc3c929815542efc969132d1efacc72bf27907 Mon Sep 17 00:00:00 2001
+From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 02:50:24 -0300
+Subject: [PATCH] sm8450-common: load the vendor_dlkm kernel modules at
+ early-init
+
+First stage init loads only the vendor_boot ramdisk list. The rest of the
+kernel release (display, touch, Wi-Fi, audio, video, camera, data) is in
+/vendor_dlkm/lib/modules with the stock load list and blocklist, and
+nothing loaded it
+
+Add an own vendor.modprobe service in rootdir/etc/init.vendor_dlkm.rc
+that runs the platform /vendor/bin/modprobe -b -s --all=<modules.load> in
+AOSP's vendor_modprobe domain at early-init, as stock starts its loader,
+and sets vendor.all.modules.ready when it ends:
+
+- --all loads the list in order with its dependencies through
+  libmodprobe, like first stage init, and a failing module does not stop
+  the others; -b applies the blocklist
+- AOSP already allows init to run vendor toolbox as vendor_modprobe and
+  vendor_modprobe to load modules from vendor_file, the label of
+  /vendor_dlkm, so no new policy is needed
+- /vendor_dlkm is mounted in first stage (fstab.qcom)
+- the stock Qualcomm vendor_modprobe.sh is not used: it is marked
+  confidential and proprietary and does the same with a shell loop
+
+This lifts the vendor.modprobe gate of init-service-qualification.json:
+it becomes the one approved vendor service, as an own definition, and
+the tests check the service, its domain, its install and the first
+stage mount of vendor_dlkm. Not built or tested on hardware
+---
+ common.mk                         |  5 +++++
+ docs/INIT_SERVICE_OWNERSHIP.md    | 10 +++++++---
+ init-service-qualification.json   |  9 +++++----
+ rootdir/etc/init.vendor_dlkm.rc   | 33 +++++++++++++++++++++++++++++++
+ tests/test_init_service_review.py | 25 +++++++++++++++++++++--
+ 5 files changed, 73 insertions(+), 9 deletions(-)
+ create mode 100644 rootdir/etc/init.vendor_dlkm.rc
+
+diff --git a/common.mk b/common.mk
+index 02e7737..cd8a79e 100644
+--- a/common.mk
++++ b/common.mk
+@@ -23,6 +23,11 @@ PRODUCT_COPY_FILES += \
+     $(LOCAL_PATH)/rootdir/etc/fstab.qcom:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.qcom \
+     $(LOCAL_PATH)/rootdir/etc/fstab.qcom:$(TARGET_COPY_OUT_VENDOR_RAMDISK)/first_stage_ramdisk/fstab.qcom
+ 
++# Second stage kernel modules of vendor_dlkm (rootdir/etc/init.vendor_dlkm.rc):
++# own service definition, the platform modprobe and AOSP's vendor_modprobe domain.
++PRODUCT_COPY_FILES += \
++    $(LOCAL_PATH)/rootdir/etc/init.vendor_dlkm.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.vendor_dlkm.rc
++
+ # Xiaomi mondrian uses dynamic partitions and A/B. The board-level EROFS
+ # selections live in BoardConfigCommon.mk, not in a disabled boot-only fragment.
+ PRODUCT_USE_DYNAMIC_PARTITIONS := true
+diff --git a/docs/INIT_SERVICE_OWNERSHIP.md b/docs/INIT_SERVICE_OWNERSHIP.md
+index 129a229..5303a7e 100644
+--- a/docs/INIT_SERVICE_OWNERSHIP.md
++++ b/docs/INIT_SERVICE_OWNERSHIP.md
+@@ -28,9 +28,13 @@ verified. A successful source checkout does NOT demonstrate runtime.
+   vendor-supplied HALs. Original files use `override`, so blindly
+   importing could collide with Android17 AIDL/HIDL HAL instance
+   ownership and service definitions.
+-- `vendor.modprobe`: staged module loading depends on complete
+-  kernel/modules/DTBO/KMI and filesystem ownership. Do not start with
+-  empty module or mismatched kernel trees.
++- `vendor.modprobe`: approved as an own definition,
++  `rootdir/etc/init.vendor_dlkm.rc`. The kernel release ships
++  vendor_dlkm with the stock load list and blocklist; the service runs
++  the platform `/vendor/bin/modprobe -b --all=...modules.load` in AOSP's
++  `vendor_modprobe` domain at early-init instead of the Qualcomm
++  script. Still pending on hardware: every module loads with the release
++  of the same CI run.
+ 
+ ### Not enabled without need
+ 
+diff --git a/init-service-qualification.json b/init-service-qualification.json
+index 06008ff..85399eb 100644
+--- a/init-service-qualification.json
++++ b/init-service-qualification.json
+@@ -66,8 +66,9 @@
+     {
+       "name": "vendor.modprobe",
+       "category": "qualcomm_kernel_modules",
+-      "requires_binary": "/vendor/bin/vendor_modprobe.sh",
+-      "status": "blocked_until_kernel_modules_abi"
++      "requires_binary": "/vendor/bin/modprobe",
++      "status": "approved_own_definition",
++      "definition": "rootdir/etc/init.vendor_dlkm.rc"
+     },
+     {
+       "name": "vendor.msm_irqbalance",
+@@ -96,8 +97,8 @@
+   ],
+   "new_tree": {
+     "copied_init_service_definitions": 0,
+-    "active_vendor_services_approved": 0,
+-    "active_vendor_services_built": 0
++    "active_vendor_services_approved": 1,
++    "active_vendor_services_built": 1
+   },
+   "constraints": {
+     "rom_init_independence": true,
+diff --git a/rootdir/etc/init.vendor_dlkm.rc b/rootdir/etc/init.vendor_dlkm.rc
+new file mode 100644
+index 0000000..c758d2d
+--- /dev/null
++++ b/rootdir/etc/init.vendor_dlkm.rc
+@@ -0,0 +1,33 @@
++# SPDX-License-Identifier: Apache-2.0
++#
++# Second stage kernel modules of vendor_dlkm.
++#
++# First stage init loads the vendor_boot ramdisk list. The rest of the
++# kernel release (display, touch, Wi-Fi, audio, video, camera, data) is in
++# /vendor_dlkm/lib/modules with the stock order (modules.load) and the stock
++# blocklist (modules.blocklist), and nothing else loads it.
++#
++# Stock starts a Qualcomm script as vendor.modprobe at early-init. This calls
++# the platform modprobe directly instead: --all loads the list in order with
++# its dependencies through libmodprobe, as first stage init does, -b applies
++# the blocklist, a module that fails does not stop the others, and -s copies
++# the messages to the kernel log. AOSP's vendor_modprobe domain already allows
++# init to run vendor toolbox as vendor_modprobe and to load modules from
++# vendor_file, which is the label of /vendor_dlkm. /vendor_dlkm is mounted in
++# first stage (fstab.qcom), so it is there at early-init.
++
++service vendor.modprobe /vendor/bin/modprobe -b -s --all=/vendor_dlkm/lib/modules/modules.load
++    class main
++    user root
++    group root system
++    disabled
++    oneshot
++    stdio_to_kmsg
++    seclabel u:r:vendor_modprobe:s0
++
++on early-init
++    start vendor.modprobe
++
++# Stock services that need every module wait for this property.
++on property:init.svc.vendor.modprobe=stopped
++    setprop vendor.all.modules.ready 1
+diff --git a/tests/test_init_service_review.py b/tests/test_init_service_review.py
+index fabfbb5..f59ba64 100644
+--- a/tests/test_init_service_review.py
++++ b/tests/test_init_service_review.py
+@@ -21,13 +21,34 @@ class InitServiceInventoryTests(unittest.TestCase):
+     def test_vital_services_not_deleted_or_falsely_qualified(self):
+         status = {x["name"]: x["status"] for x in self.d["key_service_candidates"]}
+         for name in ("vendor.qrtr-ns", "vendor.pd_mapper", "vendor.per_mgr",
+-                     "vendor.audio-hal", "vendor.sensors-hal-multihal", "vendor.modprobe"):
++                     "vendor.audio-hal", "vendor.sensors-hal-multihal"):
+             self.assertIn(name, status)
+             self.assertTrue(status[name].startswith("blocked_until_"))
++        # The kernel release ships vendor_dlkm with the stock load list, so
++        # its loader is the one vendor service approved, as an own definition.
++        self.assertEqual(status["vendor.modprobe"], "approved_own_definition")
++
++    def test_vendor_dlkm_loader_is_the_platform_modprobe(self):
++        rc = (ROOT / "rootdir/etc/init.vendor_dlkm.rc").read_text()
++        self.assertIn("service vendor.modprobe /vendor/bin/modprobe -b -s "
++                      "--all=/vendor_dlkm/lib/modules/modules.load", rc)
++        self.assertIn("seclabel u:r:vendor_modprobe:s0", rc)
++        self.assertRegex(rc, r"on early-init\n\s+start vendor\.modprobe")
++        self.assertNotIn("vendor_modprobe.sh", rc)
++        config = (ROOT / "common.mk").read_text()
++        self.assertIn("rootdir/etc/init.vendor_dlkm.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/"
++                      "init.vendor_dlkm.rc", config)
++        fstab = (ROOT / "rootdir/etc/fstab.qcom").read_text()
++        dlkm = [line for line in fstab.splitlines() if line.startswith("vendor_dlkm ")]
++        self.assertTrue(dlkm)
++        self.assertTrue(all("first_stage_mount" in line for line in dlkm))
+ 
+     def test_no_legacy_processes_enabled_before_vendor(self):
+         self.assertEqual(self.d["new_tree"]["copied_init_service_definitions"], 0)
+-        self.assertEqual(self.d["new_tree"]["active_vendor_services_approved"], 0)
++        approved = [x["name"] for x in self.d["key_service_candidates"]
++                    if x["status"].startswith("approved_")]
++        self.assertEqual(approved, ["vendor.modprobe"])
++        self.assertEqual(self.d["new_tree"]["active_vendor_services_approved"], len(approved))
+         config = (ROOT / "common.mk").read_text()
+         active = "\n".join(line for line in config.splitlines()
+                            if line.strip() and not line.lstrip().startswith("#"))
+-- 
+2.56.1
+

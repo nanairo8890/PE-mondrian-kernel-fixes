@@ -1,0 +1,34 @@
+From ff1fa2b3fdc397b610e51fb73ec94dfe0fbe9698 Mon Sep 17 00:00:00 2001
+From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 02:50:24 -0300
+Subject: [PATCH] mondrian: install the stock kernel module blocklists
+
+The kernel release ships modules.blocklist next to each load list, but
+BoardConfig.mk did not pass them, so they never reached the images.
+Install them in the vendor_boot ramdisk and in vendor_dlkm, where first
+stage init and the vendor.modprobe service of sm8450-common apply them
+(libmodprobe uses the blocklist by default, modprobe -b in the service).
+The build only checks that each line is "blocklist <module>", and the
+stock file passes it
+---
+ BoardConfig.mk | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index 2b77d52..6345d87 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -34,6 +34,10 @@ BOARD_USES_VENDOR_DLKMIMAGE := true
+ BOARD_VENDOR_KERNEL_MODULES := $(wildcard $(KERNEL_PATH)/vendor_dlkm/*.ko)
+ BOARD_VENDOR_KERNEL_MODULES_LOAD := \
+     $(strip $(shell cat $(KERNEL_PATH)/vendor_dlkm/modules.load))
++# The stock blocklists of the release, installed next to each load list
++# (modprobe -b of init.vendor_dlkm.rc and first stage init skip them).
++BOARD_VENDOR_RAMDISK_KERNEL_MODULES_BLOCKLIST_FILE := $(KERNEL_PATH)/vendor_ramdisk/modules.blocklist
++BOARD_VENDOR_KERNEL_MODULES_BLOCKLIST_FILE := $(KERNEL_PATH)/vendor_dlkm/modules.blocklist
+ 
+ # Display: M11A, 1440x3200 WQHD+.
+ TARGET_SCREEN_DENSITY := 560
+-- 
+2.56.1
+

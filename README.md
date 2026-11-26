@@ -11,6 +11,8 @@ Private repository: the base code is LF5's and these patches are for him
 | `patches/modules/0001-*.patch` | `android_kernel_xiaomi_sm8450-modules` | `f0100b23` (branch `bringup/a17-mondrian-kernel-release-20261126`) |
 | `patches/kernel/0001-*.patch` to `0004-*.patch` | `android_kernel_xiaomi_sm8450` | `2efda4cf` (branch `bringup/a17-mondrian-oem-display-coherent-20261115`) |
 | `patches/devicetrees/0001-*.patch` | `android_kernel_xiaomi_sm8450-devicetrees` | `547c333c` (branch `bringup/a17-mondrian-stock-dt-reconcile-20261125`) |
+| `patches/device-sm8450-common/0001-*.patch` | `android_device_xiaomi_sm8450-common` | `427b0f68` (branch `bringup/a17-mondrian-oem-vendor-os3-20261125`) |
+| `patches/device-mondrian/0001-*.patch` | `android_device_xiaomi_mondrian` | `aef7688d` (branch `bringup/a17-mondrian-oem-vendor-os3-20261125`) |
 
 Apply them in order with `git am`:
 
@@ -61,9 +63,14 @@ Both modules build without warnings (Clang r584948, mondrian GKI config with Ful
 
 The stock OS3 module also has THP, knock and touch sensor nodes that are in no published Xiaomi source; the Goodix touch does not use them
 
-## Proposal for the ROM
+### ROM: load the vendor_dlkm modules
 
-`docs/rom-module-loading.md`: nothing in the ROM loads the `vendor_dlkm` modules yet. It proposes Qualcomm's `vendor_modprobe.sh` as stock does, a small rc, the blocklist in `BoardConfig.mk` and a minimal SELinux policy. It also explains why `msm-cvp` should not be built
+Nothing in the ROM loaded the modules of `vendor_dlkm`, so display, touch, Wi-Fi, audio, video, camera and data drivers never loaded in a normal boot
+
+- **sm8450-common:** new `rootdir/etc/init.vendor_dlkm.rc`, an own `vendor.modprobe` service that runs the platform `/vendor/bin/modprobe -b -s --all=/vendor_dlkm/lib/modules/modules.load` in AOSP's `vendor_modprobe` domain at early-init, as stock starts its loader, and sets `vendor.all.modules.ready`. No new SELinux policy is needed and the stock Qualcomm script (marked confidential and proprietary) is not used. It lifts the `vendor.modprobe` gate of `init-service-qualification.json` and adds a test for the service, its domain, its install and the first stage mount of `vendor_dlkm`. All 38 tests pass
+- **mondrian:** `BoardConfig.mk` installs the stock `modules.blocklist` of the release in the `vendor_boot` ramdisk and in `vendor_dlkm`. All 13 tests pass
+
+`docs/rom-module-loading.md` has the background, the checks against the AOSP 17 sources of the manifest and how to check it on the phone
 
 ## Status
 

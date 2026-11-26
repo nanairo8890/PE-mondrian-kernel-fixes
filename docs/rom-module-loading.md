@@ -1,6 +1,6 @@
-# Proposal: load the vendor_dlkm modules in the mondrian ROM
+# Load the vendor_dlkm modules in the mondrian ROM
 
-Status: proposal only, nothing here is built or tested. Based on the device trees `aef7688d` (mondrian) and `427b0f68` (sm8450-common), manifest `569c63ab` and the kernel release layout of the packaging patch in this repository
+Status: implemented in `patches/device-sm8450-common` and `patches/device-mondrian` with the approach of the "Final approach" section below. The sections in between are the first proposal, kept for the background. Nothing here is built or tested on hardware. Based on the device trees `aef7688d` (mondrian) and `427b0f68` (sm8450-common), manifest `569c63ab` and the kernel release layout of the packaging patch in this repository
 
 ## The problem
 
@@ -90,6 +90,16 @@ BOARD_VENDOR_SEPOLICY_DIRS += $(COMMON_PATH)/sepolicy/vendor
 ```
 
 With `seclabel u:r:vendor_modprobe:s0` in the rc, the `domain_auto_trans` line is not needed. It is kept so a stock rc that relies on the transition also works
+
+## Final approach (what the patches do)
+
+The first proposal above used the stock Qualcomm `vendor_modprobe.sh`. That script is marked "Confidential and Proprietary - Qualcomm Technologies, Inc.", so it should not be copied as source, and only does a shell loop over `modules.load`. The patches use the platform instead, checked against `system_core` `8e0f22aa` of the manifest:
+
+- `toolbox/modprobe.cpp`: `--all=<file>` loads the list through `Modprobe::LoadListedModules(false)`, which loads every module with its dependencies, skips blocklisted ones and goes on when one fails; `-b` applies `modules.blocklist`; `-s` also logs to the kernel log
+- `/vendor/bin/modprobe` is a symlink of `toolbox_vendor`
+- `system_sepolicy` `vendor/vendor_modprobe.te` has `domain_trans(init, vendor_toolbox_exec, vendor_modprobe)` and allows `module_load` on `vendor_file`, which is the label of `/vendor_dlkm`, so `seclabel u:r:vendor_modprobe:s0` works with no new policy
+- First stage init (`Modprobe` constructor) uses the blocklist by default
+- `fstab.qcom` mounts `vendor_dlkm` in first stage, so it is there at early-init
 
 ## How to check it on the phone
 

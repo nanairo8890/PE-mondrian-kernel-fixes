@@ -2,7 +2,7 @@
 
 Patches for the mondrian (POCO F5 Pro / Redmi K60) kernel of LF5's PixelExperience-Reborn Android 17 project
 
-Private repository: the base code is LF5's and these patches are for him
+The base code is LF5's and these patches are for him to review and apply
 
 ## Patches
 

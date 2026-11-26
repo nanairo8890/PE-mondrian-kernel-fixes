@@ -1,0 +1,236 @@
+From 003a13416cdfb02a771d734738e4c8481d6269a0 Mon Sep 17 00:00:00 2001
+From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 02:12:55 -0300
+Subject: [PATCH] input: goodix: wait for system resume in the IRQ, release FOD
+ contacts, apply DT pin states
+
+Four touch issues found reading 2efda4cf1afa, none of them seen on
+hardware yet:
+
+- A wake gesture (double tap, FOD) replayed at system resume can run
+  the IRQ thread before the SPI GENI controller has resumed, and the
+  controller returns -EACCES while runtime PM is still disabled, so the
+  event is lost. The PM callbacks now mark the system suspended in every
+  mode, also when the panel notifier owns the touch state, and the IRQ
+  thread waits for the resume callback for up to 700 ms before reading
+
+- A FOD-DOWN reported in gesture mode holds slot 0 down. If its FOD-UP
+  is lost in the reset at unblank, the contact stays pressed until the
+  next touch. Resume now releases every contact after a gesture mode
+  session
+
+- The DT names the pin states pmx_ts_active (INT and RESET with
+  pull-up) and pmx_ts_suspend, which are not the driver core's default
+  state, so nothing selected them. The driver now selects the active
+  state at probe and before power on, and the suspend state after power
+  off. Both states stay optional
+
+- With goodix,require-panel-notifier a missing drm_panel deferred the
+  probe forever without saying why. The probe now records the reason
+  with dev_err_probe, visible in devices_deferred
+
+Compiled as a module with Clang r584948 against the mondrian GKI
+config with the hardening fragment, no warnings in the driver
+---
+ .../goodix_berlin_driver/goodix_ts_core.c     | 85 +++++++++++++++++--
+ .../goodix_berlin_driver/goodix_ts_core.h     | 15 ++++
+ 2 files changed, 95 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
+index 0d45ff5551bd..dc842eb0d73e 100644
+--- a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
++++ b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.c
+@@ -1246,6 +1246,16 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
+ 	int ret;
+ 
+ 	disable_irq_nosync(core_data->irq);
++	/*
++	 * A wake gesture replayed at system resume can run before the SPI
++	 * controller has resumed, and the controller rejects transfers until
++	 * then: wait for our own resume callback instead of losing the event.
++	 */
++	if (READ_ONCE(core_data->pm_suspended) &&
++	    !wait_for_completion_timeout(&core_data->pm_resumed,
++					 msecs_to_jiffies(GOODIX_PM_RESUME_WAIT_MS)))
++		ts_err(dev, "system resume not finished after %d ms, reading anyway",
++		       GOODIX_PM_RESUME_WAIT_MS);
+ 	ts_esd->irq_status = true;
+ 	core_data->irq_trig_cnt++;
+ 
+@@ -1401,6 +1411,43 @@ int goodix_ts_power_off(struct goodix_ts_core *cd)
+ 	return ret;
+ }
+ 
++/*
++ * The DT names the touch pin states "pmx_ts_active" (INT and RESET with
++ * pull-up) and "pmx_ts_suspend". They are not the driver core's "default"
++ * state, so nothing selects them unless the driver does. Both are optional.
++ */
++static void goodix_ts_pinctrl_init(struct goodix_ts_core *cd)
++{
++	struct device *dev = cd->bus->dev;
++	struct pinctrl *pinctrl = devm_pinctrl_get(dev);
++
++	if (IS_ERR_OR_NULL(pinctrl)) {
++		ts_info(dev, "no touch pinctrl: %ld", PTR_ERR(pinctrl));
++		return;
++	}
++	cd->pinctrl = pinctrl;
++	cd->pin_active = pinctrl_lookup_state(pinctrl, "pmx_ts_active");
++	if (IS_ERR(cd->pin_active))
++		cd->pin_active = NULL;
++	cd->pin_suspend = pinctrl_lookup_state(pinctrl, "pmx_ts_suspend");
++	if (IS_ERR(cd->pin_suspend))
++		cd->pin_suspend = NULL;
++	ts_info(dev, "touch pin states: active %s, suspend %s",
++		cd->pin_active ? "yes" : "no", cd->pin_suspend ? "yes" : "no");
++}
++
++static void goodix_ts_select_pins(struct goodix_ts_core *cd,
++				  struct pinctrl_state *state)
++{
++	int ret;
++
++	if (!cd->pinctrl || !state)
++		return;
++	ret = pinctrl_select_state(cd->pinctrl, state);
++	if (ret)
++		ts_err(cd->bus->dev, "failed to select touch pin state: %d", ret);
++}
++
+ /**
+  * goodix_ts_gpio_setup - Request gpio resources from GPIO subsysten
+  * @core_data: pointer to touch core data
+@@ -1776,10 +1823,12 @@ static int goodix_ts_suspend_locked(struct goodix_ts_core *core_data)
+ 		hw_ops->irq_enable(core_data, true);
+ 	} else {
+ 		/* enter sleep mode or power off */
+-		if (core_data->board_data->sleep_enable)
++		if (core_data->board_data->sleep_enable) {
+ 			hw_ops->suspend(core_data);
+-		else
++		} else {
+ 			goodix_ts_power_off(core_data);
++			goodix_ts_select_pins(core_data, core_data->pin_suspend);
++		}
+ 	}
+ 
+ 	ts_info(dev, "Suspend end");
+@@ -1817,12 +1866,21 @@ static int goodix_ts_resume_locked(struct goodix_ts_core *core_data)
+ 		hw_ops->resume(core_data);
+ 	} else {
+ 		/* reset device or power on*/
+-		if (core_data->board_data->sleep_enable)
++		if (core_data->board_data->sleep_enable) {
+ 			hw_ops->resume(core_data);
+-		else
++		} else {
++			goodix_ts_select_pins(core_data, core_data->pin_active);
+ 			goodix_ts_power_on(core_data);
++		}
+ 	}
+ 
++	/*
++	 * A FOD-DOWN reported in gesture mode holds slot 0 down. Its FOD-UP
++	 * can be lost in the reset above, so start the resumed session with
++	 * every contact released.
++	 */
++	if (core_data->suspend_gestures)
++		goodix_ts_release_connects(core_data);
+ 	core_data->suspend_gestures = 0;
+ 	/* enable irq */
+ 	hw_ops->irq_enable(core_data, true);
+@@ -1976,10 +2034,17 @@ static int goodix_ts_pm_suspend(struct device *dev)
+ 
+ 	int ret = 0;
+ 
++	reinit_completion(&core_data->pm_resumed);
++	WRITE_ONCE(core_data->pm_suspended, true);
++
+ 	mutex_lock(&core_data->pm_lock);
+ 	if (!goodix_panel_owns_pm(core_data))
+ 		ret = goodix_ts_suspend_locked(core_data);
+ 	mutex_unlock(&core_data->pm_lock);
++	if (ret) {
++		WRITE_ONCE(core_data->pm_suspended, false);
++		complete_all(&core_data->pm_resumed);
++	}
+ 	return ret;
+ }
+ /**
+@@ -1996,6 +2061,9 @@ static int goodix_ts_pm_resume(struct device *dev)
+ 	if (!goodix_panel_owns_pm(core_data))
+ 		ret = goodix_ts_resume_locked(core_data);
+ 	mutex_unlock(&core_data->pm_lock);
++
++	WRITE_ONCE(core_data->pm_suspended, false);
++	complete_all(&core_data->pm_resumed);
+ 	return ret;
+ }
+ 
+@@ -2263,7 +2331,9 @@ static int goodix_ts_probe(struct platform_device *pdev)
+ 			if (ret != -EPROBE_DEFER)
+ 				ts_err(bus_interface->dev,
+ 				       "failed to parse device tree: %d", ret);
+-			return ret;
++			/* Name the wait in devices_deferred instead of retrying silently. */
++			return dev_err_probe(&pdev->dev, ret,
++					     "touch DT resources not ready (display panel or supply)\n");
+ 		}
+ 	} else {
+ 		ts_err(bus_interface->dev, "no valid device tree node found");
+@@ -2288,6 +2358,11 @@ static int goodix_ts_probe(struct platform_device *pdev)
+ 	/* Sysfs/debug users and the asynchronous setup thread may use this. */
+ 	mutex_init(&core_data->cmd_lock);
+ 	mutex_init(&core_data->pm_lock);
++	init_completion(&core_data->pm_resumed);
++	complete_all(&core_data->pm_resumed);
++
++	goodix_ts_pinctrl_init(core_data);
++	goodix_ts_select_pins(core_data, core_data->pin_active);
+ 
+ 	/* get GPIO resource */
+ 	ret = goodix_ts_gpio_setup(core_data);
+diff --git a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h
+index 701c1cc80b9b..087c6e4f6549 100644
+--- a/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h
++++ b/drivers/input/touchscreen/goodix_berlin_driver/goodix_ts_core.h
+@@ -34,6 +34,7 @@
+ #include <linux/input.h>
+ #include <linux/interrupt.h>
+ #include <linux/completion.h>
++#include <linux/pinctrl/consumer.h>
+ #include <linux/of_irq.h>
+ #if IS_ENABLED(CONFIG_OF)
+ #include <linux/of_gpio.h>
+@@ -746,6 +747,9 @@ struct goodix_ts_device {
+ 	struct goodix_ts_board_data board_data;
+ };
+ 
++/* Longest wait of a wake IRQ for the system resume (as Xiaomi's driver). */
++#define GOODIX_PM_RESUME_WAIT_MS 700
++
+ struct goodix_ts_core {
+ 	int init_stage;
+ 	struct miscdevice tool_misc_dev;
+@@ -767,6 +771,17 @@ struct goodix_ts_core {
+ 	struct mutex pm_lock;
+ 	u32 suspend_gestures;
+ 	bool irq_wake_enabled;
++	/*
++	 * Set between system suspend and resume, whoever owns the touch
++	 * state: a wake gesture IRQ must not read the bus before the SPI
++	 * controller has resumed.
++	 */
++	bool pm_suspended;
++	struct completion pm_resumed;
++	/* Optional DT pin states pmx_ts_active and pmx_ts_suspend. */
++	struct pinctrl *pinctrl;
++	struct pinctrl_state *pin_active;
++	struct pinctrl_state *pin_suspend;
+ 	/* One-shot firmware/setup thread must finish before device teardown. */
+ 	struct task_struct *init_thread;
+ 	/* TODO counld we remove this from core data? */
+-- 
+2.56.1
+

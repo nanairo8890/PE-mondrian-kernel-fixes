@@ -1,4 +1,4 @@
-From 3d2632e15ea2c9fd3c9d5776c9f0326a196b14ae Mon Sep 17 00:00:00 2001
+From 942fecd4710df43962b852c86d0975a6c946eff8 Mon Sep 17 00:00:00 2001
 From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
 Date: Thu, 26 Nov 2026 02:35:07 -0300
 Subject: [PATCH 3/4] input: touchscreen: xiaomi: build on Clang and fail
@@ -75,6 +75,3 @@ index 2bab44c0244e..3e4239f807fe 100644
  	spin_lock_init(&pdata->raw_lock);
  	ret = xiaomi_touch_parse_dt(dev, pdata);
  	if (ret < 0) {
--- 
-2.56.1
-

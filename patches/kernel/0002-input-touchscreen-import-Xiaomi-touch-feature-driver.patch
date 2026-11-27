@@ -1,4 +1,4 @@
-From 1252b1d1bbef9e969442644cf398cbce1b9c09d6 Mon Sep 17 00:00:00 2001
+From b788cc2894a6c4eac8657c13ef00679434421266 Mon Sep 17 00:00:00 2001
 From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
 Date: Thu, 26 Nov 2026 02:34:33 -0300
 Subject: [PATCH 2/4] input: touchscreen: import Xiaomi touch feature driver
@@ -32,13 +32,13 @@ mondrian DT already carries its xiaomi-touch node
  create mode 100644 drivers/input/touchscreen/xiaomi/xiaomi_touch.h
 
 diff --git a/arch/arm64/configs/vendor/mondrian_GKI.config b/arch/arm64/configs/vendor/mondrian_GKI.config
-index 3ae9b3e00b8b..46f402d1c2a7 100644
+index 8e9191bd6fda..adf1599db809 100644
 --- a/arch/arm64/configs/vendor/mondrian_GKI.config
 +++ b/arch/arm64/configs/vendor/mondrian_GKI.config
-@@ -437,3 +437,4 @@ CONFIG_FS_ENCRYPTION_INLINE_CRYPT=y
- 
- # Goodix GT9916S Berlin D SPI touchscreen for Xiaomi mondrian.
- CONFIG_TOUCHSCREEN_GOODIX_BRL=m
+@@ -447,3 +447,4 @@ CONFIG_ARM64_ERRATUM_2051678=y
+ CONFIG_RANDOM_TRUST_BOOTLOADER=y
+ CONFIG_RANDOM_TRUST_CPU=y
+ CONFIG_SCSI_UFS_HPB=y
 +CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=m
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
 index ccda13082e03..007825f261a1 100644
@@ -1748,6 +1748,3 @@ index 000000000000..480e6da5c601
 +int xiaomi_touch_set_suspend_state(int state);
 +
 +#endif
--- 
-2.56.1
-

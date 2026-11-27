@@ -4,12 +4,20 @@ Patches for the mondrian (POCO F5 Pro / Redmi K60) kernel of LF5's PixelExperien
 
 The base code is LF5's and these patches are for him to review and apply
 
+## Status (27-nov-2026)
+
+- Modules packaging: already in LF5's branch (`855b449` and `f575a30`), the patch here is kept only for reference
+- Module blocklists: already in LF5's branch (`519319d`)
+- Loading `vendor_dlkm`: LF5 uses the stock `vendor_modprobe.sh` with `init.qti.kernel.rc` (`cc10c35`), so the `device-sm8450-common` patch is no longer needed
+- Kernel touch patches: moved to the new kernel branch `641c9a89` (zero stack init, A510 erratum 2051678, CRNG trust, UFS HPB); the only conflict was one line of `mondrian_GKI.config`. Both modules build without warnings, `goodix_core` depends on `xiaomi_touch` and `tools/verify_mondrian_goodix.py` passes
+- Device trees patches: still apply on `547c333c`, the current head
+
 ## Patches
 
 | Patches | Repository | Base |
 |---|---|---|
 | `patches/modules/0001-*.patch` | `android_kernel_xiaomi_sm8450-modules` | `f0100b23` (branch `bringup/a17-mondrian-kernel-release-20261126`) |
-| `patches/kernel/0001-*.patch` to `0004-*.patch` | `android_kernel_xiaomi_sm8450` | `2efda4cf` (branch `bringup/a17-mondrian-oem-display-coherent-20261115`) |
+| `patches/kernel/0001-*.patch` to `0004-*.patch` | `android_kernel_xiaomi_sm8450` | `641c9a89` (branch `bringup/a17-mondrian-kernel-hardening-20261126`) |
 | `patches/devicetrees/0001-*.patch` and `0002-*.patch` | `android_kernel_xiaomi_sm8450-devicetrees` | `547c333c` (branch `bringup/a17-mondrian-stock-dt-reconcile-20261125`) |
 | `patches/device-sm8450-common/0001-*.patch` | `android_device_xiaomi_sm8450-common` | `427b0f68` (branch `bringup/a17-mondrian-oem-vendor-os3-20261125`) |
 | `patches/device-mondrian/0001-*.patch` | `android_device_xiaomi_mondrian` | `aef7688d` (branch `bringup/a17-mondrian-oem-vendor-os3-20261125`) |

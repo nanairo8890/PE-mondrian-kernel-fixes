@@ -1,4 +1,4 @@
-From 61962a359292d116c149861a394245594807fd43 Mon Sep 17 00:00:00 2001
+From 9409c7c76e7e2febb010e4735181875f82722ed7 Mon Sep 17 00:00:00 2001
 From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
 Date: Thu, 26 Nov 2026 02:37:24 -0300
 Subject: [PATCH 4/4] input: goodix: report fingerprint presses and take touch
@@ -390,6 +390,3 @@ index 000000000000..be2a3c6d3e57
 +		goodix_xm_fod_press(cd, false);
 +}
 +#endif
--- 
-2.56.1
-

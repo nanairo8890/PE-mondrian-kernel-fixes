@@ -1,4 +1,4 @@
-From 4b73c421e95c546e2ea4c13d0e959e2a639b54ab Mon Sep 17 00:00:00 2001
+From 55769660b3b7870304f18860a7b07551bbef86ce Mon Sep 17 00:00:00 2001
 From: Nanairo8890 <301115931+nanairo8890@users.noreply.github.com>
 Date: Thu, 26 Nov 2026 02:12:55 -0300
 Subject: [PATCH 1/4] input: goodix: wait for system resume in the IRQ, release
@@ -231,6 +231,3 @@ index 701c1cc80b9b..087c6e4f6549 100644
  	/* One-shot firmware/setup thread must finish before device teardown. */
  	struct task_struct *init_thread;
  	/* TODO counld we remove this from core data? */
--- 
-2.56.1
-
